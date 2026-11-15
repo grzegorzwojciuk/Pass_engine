@@ -23,3 +23,14 @@ class Observer:
     lon_deg: float
     alt_m: float = 0.0
     min_elev_deg: float = 10.0
+
+@dataclass(frozen=True)
+class Pass:
+    satellite: str
+    aos: datetime          # aware UTC
+    los: datetime          # aware UTC
+    max_elev_deg: float
+    max_elev_time: datetime
+    az_aos_deg: float
+    az_los_deg: float
+    duration_s: float

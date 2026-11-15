@@ -1,10 +1,10 @@
 from sgp4.api import Satrec, jday
 import numpy as np
 from math import tau, atan2
-from datetime import datetime
+from datetime import datetime, timedelta
 from .models import TleRecord
 from .models import Observer
-
+from .models import Pass
 
 def position_satellite_teme(record: TleRecord, t: datetime) -> tuple[float, float, float]:
     satellite = Satrec.twoline2rv(record.line1, record.line2)
@@ -97,3 +97,120 @@ def azimuth(record: TleRecord, t: datetime, observer: Observer) -> float:
     e = np.dot(east_teme(t, observer), satellite)
     az_deg = np.degrees(atan2(e, n)) % 360.0
     return 0.0 if az_deg == 360.00 else az_deg
+
+def find_passes(
+    record: TleRecord,
+    observer: Observer,
+    start: datetime,
+    days: float,
+    step_s: float = 10.0,
+) -> list[Pass]: 
+    '''FINDING AOS AND LOS'''
+    
+    end = start + timedelta(days=days)
+    step = timedelta(seconds=step_s)
+    t = start
+    if step <= timedelta(seconds=0):
+        raise ValueError("step_s must advance time (find_passes)")
+    elev = elevation(record, t, observer)
+    aos = None
+    passes = []
+    los_deadline = end + timedelta(days=1)
+
+    while t < end or (aos is not None and t < los_deadline):
+        limit = end if t < end else los_deadline
+        next_t = min(t + step, limit)
+        next_elev = elevation(record, next_t, observer)
+        if aos is None and t < end and elev < observer.min_elev_deg <= next_elev and (next_t < end or next_elev > observer.min_elev_deg): #finding precise time of AOS
+            t_0 = t
+            t_1 = next_t
+            emergency_max_elev_time = next_t
+            emergency_max_elev_deg = next_elev
+            finding_t = t_0 + (t_1 - t_0) / 2
+            while t_1 - t_0 > timedelta(seconds = 1):
+                finding_t = t_0 + (t_1 - t_0) / 2
+                if elevation(record, finding_t, observer) > observer.min_elev_deg:
+                    t_1 = finding_t
+                else:
+                    t_0 = finding_t
+
+            aos = t_0 + (t_1 - t_0) / 2
+            az_aos_deg = azimuth(record, aos, observer)
+        elif t == start and elev == observer.min_elev_deg and elevation(record, t - timedelta(seconds=0.1), observer) < observer.min_elev_deg < elevation(record, t + timedelta(seconds=0.1), observer):
+            aos = start
+            az_aos_deg = azimuth(record, aos, observer)
+            emergency_max_elev_time = start
+            emergency_max_elev_deg = elev
+
+        if aos is not None and elev > emergency_max_elev_deg:
+            emergency_max_elev_deg = elev
+            emergency_max_elev_time = t
+        if aos is not None and elev >= observer.min_elev_deg > next_elev:
+            t_0 = t
+            t_1 = next_t
+            while t_1 - t_0 > timedelta(seconds = 1):
+                finding_t = t_0 + (t_1 - t_0) / 2
+                if elevation(record, finding_t, observer) < observer.min_elev_deg:
+                    t_1 = finding_t
+                else:
+                    t_0 = finding_t
+
+            los = t_0 + (t_1 - t_0) / 2
+            az_los_deg = azimuth(record, los, observer)
+
+            '''FINDING MAX_ELEV'''
+
+            t_0 = aos
+            t_1 = los
+            while t_1 - t_0 > timedelta(seconds = 1):
+                t_1_3 = t_0 + (t_1 - t_0) / 3
+                t_2_3 = t_0 + 2 * ((t_1 - t_0) / 3)
+                elev_1_3 = elevation(record, t_1_3, observer)
+                elev_2_3 = elevation(record, t_2_3, observer)
+                if elev_1_3 > elev_2_3:
+                    t_1 = t_2_3
+                elif elev_1_3 < elev_2_3:
+                    t_0 = t_1_3
+                else:
+                    t_0 = t_1_3
+                    t_1 = t_2_3
+
+            max_elev_time = t_0 + (t_1 - t_0) / 2
+            max_elev_deg = elevation(record, max_elev_time, observer)
+
+            if max_elev_deg < emergency_max_elev_deg:
+                max_elev_deg = emergency_max_elev_deg
+                max_elev_time = emergency_max_elev_time
+
+            passes.append(Pass(
+                satellite=record.name or str(record.satellite_number),
+                aos=aos,
+                los=los,
+                max_elev_deg=max_elev_deg,
+                max_elev_time=max_elev_time,
+                az_aos_deg=az_aos_deg,
+                az_los_deg=az_los_deg,
+                duration_s=(los - aos).total_seconds(),))
+        
+            aos = None                       
+        t, elev = next_t, next_elev
+
+    return passes
+
+def elevation_track(
+    record: TleRecord,
+    observer: Observer,
+    start: datetime,
+    end: datetime,
+    step_s: float = 30.0,
+) -> list[tuple[datetime, float, float]]: 
+    t = start
+    track = []
+    step = timedelta(seconds=step_s)
+    if step <= timedelta(seconds=0):
+        raise ValueError("step_s must advance time (elevation_track)")
+    while t <= end:
+        track.append((t, elevation(record, t, observer), azimuth(record, t, observer)))
+        t = t + step
+
+    return track
