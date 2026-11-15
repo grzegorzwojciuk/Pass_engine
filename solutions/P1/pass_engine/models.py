@@ -16,7 +16,7 @@ class TleRecord:
     mean_anomaly_deg: float
     mean_motion_rev_per_day: float
     revolution_number: int
-
+    
 @dataclass(frozen=True)
 class Observer:
     lat_deg: float
