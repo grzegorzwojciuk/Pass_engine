@@ -1,10 +1,5 @@
-# Przyklad do sprawdzenia filtrowania
-
-ISS (ZARYA)
-
-1 25544U 98067A   19343.69339541  .00001764  00000-0  38792-4 0  9991
-# Komentarz pomiedzy liniami TLE
-
-2 25544  51.6439 211.2001 0007417  17.6667  85.6398 15.50103472202482
-
-# Koniec przykladu
+# SYNTHETIC PRE-LAUNCH TLE — nie używać do realnego trackingu
+# Parametry fizycznie sensowne (SSO ~550 km), ale obiekt jest fikcyjny.
+PW-SAT3
+1 99999U 26001A   26001.00000000  .00000000  00000+0  00000+0 0  9991
+2 99999  97.6000 000.0000 0001000 000.0000 000.0000 15.07000000    14
